@@ -3,6 +3,7 @@ package WWW::AfinimaKi;
 require RPC::XML;
 require RPC::XML::Client;
 use Digest::MD5	qw(md5_hex);
+use Carp;
 
 our $VERSION = '0.1';
 
@@ -92,7 +93,7 @@ sub set_rate {
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
         RPC::XML::i4->new($rate),
-        RPC::XML::boolean->new(0);
+        RPC::XML::boolean->new(0),
     );
 }
 

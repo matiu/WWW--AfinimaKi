@@ -1,5 +1,5 @@
+use lib qw(lib ../lib);
 
-use lib qw(../lib);
 use Test::More;
 
 
