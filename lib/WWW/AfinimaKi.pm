@@ -1,4 +1,5 @@
 package WWW::AfinimaKi;
+use strict;
 
 require RPC::XML;
 require RPC::XML::Client;
@@ -7,7 +8,7 @@ use Carp;
 
 our $VERSION = '0.1';
 
-use constant KEY_LENGTH => 33;
+use constant KEY_LENGTH => 32;
 use constant TIME_DIV   => 12;
 
 =head3 new
@@ -29,8 +30,15 @@ sub new {
 
     # url parameter is undocumented on purpose to simplify.
 
-    if ( length($key) != KEY_LENGTH || length($secret) != KEY_LENGTH  ) {
-        carp "Bad keys given, they must be ". KEY_LENGTH. " character long";
+
+    if ( length($key) != KEY_LENGTH ) {
+        carp "Bad key '$key': it must be " .  KEY_LENGTH . " character long";
+        return undef;
+    }
+
+
+    if ( length($secret) != KEY_LENGTH  ) {
+        carp "Bad key '$secret': it must be ". KEY_LENGTH . " character long";
         return undef;
     }
 
@@ -38,7 +46,6 @@ sub new {
         carp "Bad URL given : $url";
         return undef;
     }
-
 
     my $self = {
         key     => $key,
@@ -72,6 +79,7 @@ sub send_request {
     my $val = $args[0] ? $args[0]->value : undef;
 
     $self->{cli}->send_request(
+        $method,
         $self->{key},
         $self->_auth_code($method, $val),
         @args
@@ -88,8 +96,10 @@ sub send_request {
 
 sub set_rate {
     my ($self, $user_id, $item_id, $rate) = @_;
+    return undef if ! $user_id || ! $item_id || ! defined ($rate);
 
-    $self->send_request('set_rate', 
+    $self->send_request(
+        'set_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
         RPC::XML::i4->new($rate),
@@ -106,10 +116,12 @@ sub set_rate {
 
 =cut
 
-sub set_rate {
-    my ($self, $user_id, $rate) = @_;
+sub estimate_rate {
+    my ($self, $user_id,  $item_id) = @_;
+    return undef if ! $user_id || ! $item_id;
 
-    $self->send_request('set_rate', 
+    $self->send_request(
+        'estimate_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
@@ -130,11 +142,11 @@ sub set_rate {
 =cut
 
 sub get_recommendations {
-    my ($self, $user_id, $rate) = @_;
+    my ($self, $user_id) = @_;
+    return undef if ! $user_id;
 
     $self->get_recommendations('get_recommendations', 
         RPC::XML::i8->new($user_id),
-        RPC::XML::i8->new($item_id),
         RPC::XML::boolean->new(0),
     );
 }
