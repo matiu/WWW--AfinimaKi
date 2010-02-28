@@ -11,6 +11,38 @@ our $VERSION = '0.1';
 use constant KEY_LENGTH => 32;
 use constant TIME_DIV   => 12;
 
+=head1 NAME
+
+WWW::AfinimaKi - AfinimaKi Recommendation Engine Client
+
+
+=head1 SYNOPSIS
+
+    use WWW::AfinimaKi;         # Notice the uppercase "K"!
+
+    my $afinimaki = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
+
+    ...
+
+    $afinimaki->set_rate($user_id, $item_id, $rate);
+
+    ...
+
+    my $estimated_rate = $afinimaki->estimate_rate($user_id, $rate);
+
+    ...
+
+    my $recommendations = $afinimaki->get_recommendations($user_id);
+    foreach (@$recommendations) {
+        print "item_id: $_->{item_id} estimated_rate: $_->{estimated_rate}\n";
+    }
+
+=head1 DESCRIPTION
+
+WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. Check http://www.afinimaki.com/api for more details.
+
+=head1 Methods
+
 =head3 new
 
     my $afinimaki = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
@@ -19,9 +51,9 @@ use constant TIME_DIV   => 12;
         die "Error construction afinimaki, wrong keys length?";
     }
 
-    new Construct the AfinimaKi object. No nework traffic is generation (the account credentialas are not comprobated at this step). 
+    new Construct the AfinimaKi object. No nework traffic is generated (the account credentialas are not checked at this point). 
 
-    If the given keys are not 33 character long, 'undef' is returned.
+    The given keys must be 32 character long. You can get them at afinimaki.com
 
 =cut
 
@@ -103,7 +135,7 @@ sub set_rate {
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
         RPC::XML::i4->new($rate),
-        RPC::XML::boolean->new(0),
+        RPC::XML::boolean->new(1),
     );
 }
 
@@ -112,7 +144,7 @@ sub set_rate {
 
     my $estimated_rate = $afinimaki->estimate_rate($user_id, $rate);
 
-    Estimate rate. Waits until the call has ended.
+    Estimate a rate. Undef is returned if the rate could not be estimated (usually because the given user or the given item does not have many rates).
 
 =cut
 
@@ -145,10 +177,76 @@ sub get_recommendations {
     my ($self, $user_id) = @_;
     return undef if ! $user_id;
 
-    $self->get_recommendations('get_recommendations', 
+    my $r = $self->get_recommendations('get_recommendations', 
         RPC::XML::i8->new($user_id),
         RPC::XML::boolean->new(0),
     );
+
+    return [
+        map { {
+            item_id         => $_->[0]->value,
+            estimated_rate  => $_->[1]->value,
+        } } @$r
+    ];
 }
 
+=head3 add_to_wishlist
+
+    $afinimaki->add_to_wishlist($user_id, $item_id);
+
+    The given $item_id will be added do user's wishlist. This means that id will not
+    be in the user's recommentation list anymore. 
+
+=cut
+
+sub add_to_wishlist {
+    my ($self, $user_id, $item_id) = @_;
+    return undef if ! $user_id || ! $item_id;
+
+    $self->send_request(
+        'add_to_wishlist', 
+        RPC::XML::i8->new($user_id),
+        RPC::XML::i8->new($item_id),
+    );
+}
+
+
+=head3 add_to_blacklist
+
+    $afinimaki->add_to_blacklist($user_id, $item_id);
+
+    The given $item_id will be added do user's blacklist. This means that id will not
+    be in the user's recommentation list anymore. 
+
+=cut
+
+sub add_to_blacklist {
+    my ($self, $user_id, $item_id) = @_;
+    return undef if ! $user_id || ! $item_id;
+
+    $self->send_request(
+        'add_to_blacklist', 
+        RPC::XML::i8->new($user_id),
+        RPC::XML::i8->new($item_id),
+    );
+}
+
+__END__
+
+=head1 AUTHORS
+
+WWW::AfinimaKi by Matias Alejo Garcia (matiu at cpan.org)
+
+=head1 COPYRIGHT
+
+Copyright (c) 2010 Matias Alejo Garcia. All rights reserved.  This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+=head1 SUPPORT / WARRANTY
+
+The WWW::AfinimaKi is free Open Source software. IT COMES WITHOUT WARRANTY OF ANY KIND.
+
+=head1 BUGS
+
+None discovered yet... please let me know if you run into one.
+	
 
