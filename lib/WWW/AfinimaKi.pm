@@ -177,7 +177,7 @@ sub estimate_multiple_rates {
     my ($self, $user_id,  @item_ids) = @_;
     return undef if ! $user_id || ! @item_ids;
 
-    $self->send_request(
+    my $r = $self->send_request(
             'estimate_multiple_rates', 
             RPC::XML::i8->new($user_id),
             RPC::XML::array->new( 
@@ -186,6 +186,14 @@ sub estimate_multiple_rates {
                     } @item_ids
                 )
         );
+    
+    my $ret = {}; 
+    my $i = 0;
+    foreach (@$r) {
+        $ret->{$item_ids[$i++]} = $_->value;
+    }
+
+    return $ret;
 }
 
 
