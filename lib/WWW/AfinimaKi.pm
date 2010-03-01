@@ -142,7 +142,7 @@ sub set_rate {
 
 =head3 estimate_rate
 
-    my $estimated_rate = $afinimaki->estimate_rate($user_id, $rate);
+    my $estimated_rate = $afinimaki->estimate_rate($user_id, $item_id);
 
     Estimate a rate. Undef is returned if the rate could not be estimated (usually because the given user or the given item does not have many rates).
 
@@ -158,6 +158,36 @@ sub estimate_rate {
         RPC::XML::i8->new($item_id),
     );
 }
+
+
+
+=head3 estimate_multiple_rates
+
+    my $rates_hashref = $afinimaki->estimate_rate($user_id, @item_ids);
+        foreach my $item_id (keys %$rates_hashref) {
+        print "Estimated rate for $item_id is $rates_hashref->{$item_id}\n";
+    }
+
+    Estimate multimple rates. The returned hash has the structure: 
+            item_id => estimated_rate
+
+=cut
+
+sub estimate_multiple_rates {
+    my ($self, $user_id,  @item_ids) = @_;
+    return undef if ! $user_id || ! @item_ids;
+
+    $self->send_request(
+            'estimate_multiple_rates', 
+            RPC::XML::i8->new($user_id),
+            RPC::XML::array->new( 
+                    map {
+                        RPC::XML::i8->new($_)
+                    } @item_ids
+                )
+        );
+}
+
 
 
 =head3 get_recommendations 
@@ -177,7 +207,8 @@ sub get_recommendations {
     my ($self, $user_id) = @_;
     return undef if ! $user_id;
 
-    my $r = $self->get_recommendations('get_recommendations', 
+    my $r = $self->send_request(
+        'get_recommendations', 
         RPC::XML::i8->new($user_id),
         RPC::XML::boolean->new(0),
     );
