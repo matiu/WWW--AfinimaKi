@@ -68,19 +68,23 @@ sub new {
     my $key     =  $args{api_key};
     my $secret  =  $args{api_secret};
     my $debug   =  $args{debug};
-    my $url     =  $args{host};
+    my $url     =  $args{url} || 'http://api.afinimaki.com/RPC2';
 
     # url parameter is undocumented on purpose to simplify.
 
+    if ( !$key  || ! $secret ) {
+        carp "api_key and api_secret parameters are mandatory";
+        return undef;
+    }
 
     if ( length($key) != KEY_LENGTH ) {
-        carp "Bad key '$key': it must be " .  KEY_LENGTH . " character long";
+        carp "Bad api_key '$key': it must be " .  KEY_LENGTH . " character long";
         return undef;
     }
 
 
     if ( length($secret) != KEY_LENGTH  ) {
-        carp "Bad key '$secret': it must be ". KEY_LENGTH . " character long";
+        carp "Bad api_secret '$secret': it must be ". KEY_LENGTH . " character long";
         return undef;
     }
 
@@ -92,11 +96,12 @@ sub new {
     my $self = {
         key     => $key,
         secret  => $secret,
-        cli     => RPC::XML::Client->new($url || 'http://api.afinimaki.com/RPC2'),
+        cli     => RPC::XML::Client->new($url),
         debug   => $debug,
     };
 
     bless $self, $class;
+
     return $self;
 }
 
@@ -122,15 +127,31 @@ sub send_request {
     my $val = $args[0] ? $args[0]->value : undef;
 
 
-    print STDERR __PACKAGE__ . "$method (".join(', ',  @args) . ") "
-        if $self->debug;
+    print STDERR __PACKAGE__ 
+        . "=> $method ("
+        . join(
+            ', ',  
+            map { $_->value } 
+            @args
+        ) 
+        . ")\n"
+        if $self->{debug};
 
-    $self->{cli}->send_request(
+
+    my $r = $self->{cli}->send_request(
         $method,
         $self->{key},
         $self->_auth_code($method, $val),
         @args
-        );
+    );
+
+    if (ref($r)) {
+        return $r;
+    }
+    else {
+        carp $r;
+        return undef;
+    }
 }
 
 
@@ -142,13 +163,15 @@ sub send_request {
 
     Stores a rate in the server. Waits until the call has ended.
 
+    On error, returns undef, and carp the RPC::XML error.
+
 =cut
 
 sub set_rate {
     my ($self, $user_id, $item_id, $rate) = @_;
     return undef if ! $user_id || ! $item_id || ! defined ($rate);
 
-    $self->send_request(
+    return $self->send_request(
         'set_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
@@ -164,6 +187,7 @@ sub set_rate {
 
     Estimate a rate. Undef is returned if the rate could not be estimated (usually because the given user or the given item does not have many rates).
 
+    On error, returns undef, and carp the RPC::XML error.
 =cut
 
 sub estimate_rate {
@@ -175,6 +199,9 @@ sub estimate_rate {
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
+
+    return undef if ! $r;
+
 
     return 1.0 * $r->value;
 }
@@ -191,6 +218,8 @@ sub estimate_rate {
     Estimate multimple rates. The returned hash has the structure: 
             item_id => estimated_rate
 
+    On error, returns undef, and carp the RPC::XML error.
+
 =cut
 
 sub estimate_multiple_rates {
@@ -206,6 +235,7 @@ sub estimate_multiple_rates {
                     } @item_ids
                 )
         );
+    return undef if ! $r;
     
     my $ret = {}; 
     my $i = 0;
@@ -239,6 +269,7 @@ sub get_recommendations {
         RPC::XML::i8->new($user_id),
         RPC::XML::boolean->new(0),
     );
+    return undef if ! $r;
 
     return [
         map { {
@@ -261,7 +292,7 @@ sub add_to_wishlist {
     my ($self, $user_id, $item_id) = @_;
     return undef if ! $user_id || ! $item_id;
 
-    $self->send_request(
+    return $self->send_request(
         'add_to_wishlist', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
@@ -282,7 +313,7 @@ sub add_to_blacklist {
     my ($self, $user_id, $item_id) = @_;
     return undef if ! $user_id || ! $item_id;
 
-    $self->send_request(
+    return $self->send_request(
         'add_to_blacklist', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
@@ -291,23 +322,24 @@ sub add_to_blacklist {
 
 =head2 user-user services
 
-=head3 user_user_afinimaki 
+=head3 get_user_user_afinimaki 
 
-    my $afinimaki = $api->user_user_afinimaki($user_id_1, $user_id_2);
+    my $afinimaki = $api->get_user_user_afinimaki($user_id_1, $user_id_2);
 
     Gets user vs user afinimaki. AfinimaKi range is [0.0-1.0].
 
 =cut
 
-sub user_user_afinimaki {
+sub get_user_user_afinimaki {
     my ($self, $user_id_1,  $user_id_2) = @_;
     return undef if ! $user_id_1 || ! $user_id_2;
     
     my $r = $self->send_request(
-        'user_user_afinimaki', 
+        'get_user_user_afinimaki', 
         RPC::XML::i8->new($user_id_1),
         RPC::XML::i8->new($user_id_2),
     );
+    return undef if ! $r;
 
     return 1.0 * $r->value;
 }
@@ -334,6 +366,8 @@ sub get_soul_mates {
         'get_soul_mates', 
         RPC::XML::i8->new($user_id),
     );
+
+    return undef if ! $r;
 
     return [
         map { {
