@@ -4,6 +4,7 @@ use strict;
 require RPC::XML;
 require RPC::XML::Client;
 use Digest::MD5	qw(md5_hex);
+use Encode;
 use Carp;
 
 our $VERSION = '0.1';
@@ -20,19 +21,19 @@ WWW::AfinimaKi - AfinimaKi Recommendation Engine Client
 
     use WWW::AfinimaKi;         # Notice the uppercase "K"!
 
-    my $afinimaki = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
+    my $api = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
 
     ...
 
-    $afinimaki->set_rate($user_id, $item_id, $rate);
+    $api->set_rate($user_id, $item_id, $rate);
 
     ...
 
-    my $estimated_rate = $afinimaki->estimate_rate($user_id, $rate);
+    my $estimated_rate = $api->estimate_rate($user_id, $rate);
 
     ...
 
-    my $recommendations = $afinimaki->get_recommendations($user_id);
+    my $recommendations = $api->get_recommendations($user_id);
     foreach (@$recommendations) {
         print "item_id: $_->{item_id} estimated_rate: $_->{estimated_rate}\n";
     }
@@ -45,9 +46,9 @@ WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. Check ht
 
 =head3 new
 
-    my $afinimaki = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
+    my $api = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
 
-    if (!$afinimaki) {
+    if (!$api) {
         die "Error construction afinimaki, wrong keys length?";
     }
 
@@ -118,9 +119,12 @@ sub send_request {
         );
 }
 
+
+=head2 user-item services
+
 =head3 set_rate
 
-    $afinimaki->set_rate($user_id, $item_id, $rate);
+    $api->set_rate($user_id, $item_id, $rate);
 
     Stores a rate in the server. Waits until the call has ended.
 
@@ -142,7 +146,7 @@ sub set_rate {
 
 =head3 estimate_rate
 
-    my $estimated_rate = $afinimaki->estimate_rate($user_id, $item_id);
+    my $estimated_rate = $api->estimate_rate($user_id, $item_id);
 
     Estimate a rate. Undef is returned if the rate could not be estimated (usually because the given user or the given item does not have many rates).
 
@@ -152,18 +156,20 @@ sub estimate_rate {
     my ($self, $user_id,  $item_id) = @_;
     return undef if ! $user_id || ! $item_id;
 
-    $self->send_request(
+    my $r = $self->send_request(
         'estimate_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
+
+    return 1.0 * $r->value;
 }
 
 
 
 =head3 estimate_multiple_rates
 
-    my $rates_hashref = $afinimaki->estimate_rate($user_id, @item_ids);
+    my $rates_hashref = $api->estimate_rate($user_id, @item_ids);
         foreach my $item_id (keys %$rates_hashref) {
         print "Estimated rate for $item_id is $rates_hashref->{$item_id}\n";
     }
@@ -190,17 +196,16 @@ sub estimate_multiple_rates {
     my $ret = {}; 
     my $i = 0;
     foreach (@$r) {
-        $ret->{$item_ids[$i++]} = $_->value;
+        $ret->{$item_ids[$i++]} = 1.0 * $_->value;
     }
 
     return $ret;
 }
 
 
-
 =head3 get_recommendations 
 
-    my $recommendations = $afinimaki->get_recommendations($user_id);
+    my $recommendations = $api->get_recommendations($user_id);
 
     foreach (@$recommendations) {
         print "item_id: $_->{item_id} estimated_rate: $_->{estimated_rate}\n";
@@ -223,15 +228,15 @@ sub get_recommendations {
 
     return [
         map { {
-            item_id         => $_->[0]->value,
-            estimated_rate  => $_->[1]->value,
+            item_id         => 1   * $_->[0]->value,
+            estimated_rate  => 1.0 * $_->[1]->value,
         } } @$r
     ];
 }
 
 =head3 add_to_wishlist
 
-    $afinimaki->add_to_wishlist($user_id, $item_id);
+    $api->add_to_wishlist($user_id, $item_id);
 
     The given $item_id will be added do user's wishlist. This means that id will not
     be in the user's recommentation list anymore. 
@@ -252,7 +257,7 @@ sub add_to_wishlist {
 
 =head3 add_to_blacklist
 
-    $afinimaki->add_to_blacklist($user_id, $item_id);
+    $api->add_to_blacklist($user_id, $item_id);
 
     The given $item_id will be added do user's blacklist. This means that id will not
     be in the user's recommentation list anymore. 
@@ -269,6 +274,62 @@ sub add_to_blacklist {
         RPC::XML::i8->new($item_id),
     );
 }
+
+=head2 user-user services
+
+=head3 user_user_afinimaki 
+
+    my $afinimaki = $api->user_user_afinimaki($user_id_1, $user_id_2);
+
+    Gets user vs user afinimaki. AfinimaKi range is [0.0-1.0].
+
+=cut
+
+sub user_user_afinimaki {
+    my ($self, $user_id_1,  $user_id_2) = @_;
+    return undef if ! $user_id_1 || ! $user_id_2;
+
+    my $r = $self->send_request(
+        'user_user_afinimaki', 
+        RPC::XML::i8->new($user_id_1),
+        RPC::XML::i8->new($user_id_2),
+    );
+
+    return 1.0 * $r->value;
+}
+
+
+
+=head3 get_soul_mates 
+
+    my $soul_mates = $api->get_soul_mates($user_id);
+
+    foreach (@$soul_mates) {
+        print "user_id: $_->{user_id} afinimaki: $_->{afinimaki}\n";
+    }
+
+    Get a list of user's soul mates (users with similar tastes). AfinimaKi range is [0.0-1.0].
+
+=cut
+
+sub get_soul_mates {
+    my ($self, $user_id) = @_;
+    return undef if ! $user_id;
+
+    my $r = $self->send_request(
+        'get_soul_mates', 
+        RPC::XML::i8->new($user_id),
+    );
+
+    return [
+        map { {
+            user_id         => 1   * $_->[0]->value,
+            afinimaki       => 1.0 * $_->[1]->value,
+        } } @$r
+    ];
+}
+
+
 
 __END__
 

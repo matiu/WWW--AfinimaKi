@@ -12,6 +12,7 @@ WriteMakefile(
 			'Carp'				=> undef,
             'RPC::XML'          => undef,
             'RPC::XML::Client'  => undef,
+            'Encode'            => undef,
         },
     MIN_PERL_VERSION => '5.8.0',
 );
