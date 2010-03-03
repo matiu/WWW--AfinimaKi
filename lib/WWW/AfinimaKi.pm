@@ -46,7 +46,11 @@ WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. Check ht
 
 =head3 new
 
-    my $api = WWW::AfinimaKi->new( $your_api_key, $your_api_secret);
+    my $api = WWW::AfinimaKi->new( 
+                    api_key     => $your_api_key, 
+                    api_secret  => $your_api_secret, 
+                    debug       => $debug_level,
+    );
 
     if (!$api) {
         die "Error construction afinimaki, wrong keys length?";
@@ -54,12 +58,17 @@ WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. Check ht
 
     new Construct the AfinimaKi object. No nework traffic is generated (the account credentialas are not checked at this point). 
 
-    The given keys must be 32 character long. You can get them at afinimaki.com
+    The given keys must be 32 character long. You can get them at afinimaki.com. Debug level can be 0 or 1.
 
 =cut
 
 sub new {
-    my ($class, $key, $secret, $url) = @_;  
+    my ($class, %args) = @_;  
+
+    my $key     =  $args{api_key};
+    my $secret  =  $args{api_secret};
+    my $debug   =  $args{debug};
+    my $url     =  $args{host};
 
     # url parameter is undocumented on purpose to simplify.
 
@@ -84,6 +93,7 @@ sub new {
         key     => $key,
         secret  => $secret,
         cli     => RPC::XML::Client->new($url || 'http://api.afinimaki.com/RPC2'),
+        debug   => $debug,
     };
 
     bless $self, $class;
@@ -110,6 +120,10 @@ sub send_request {
     my ($self, $method, @args) = @_;
 
     my $val = $args[0] ? $args[0]->value : undef;
+
+
+    print STDERR __PACKAGE__ . "$method (".join(', ',  @args) . ") "
+        if $self->debug;
 
     $self->{cli}->send_request(
         $method,
@@ -288,7 +302,7 @@ sub add_to_blacklist {
 sub user_user_afinimaki {
     my ($self, $user_id_1,  $user_id_2) = @_;
     return undef if ! $user_id_1 || ! $user_id_2;
-
+    
     my $r = $self->send_request(
         'user_user_afinimaki', 
         RPC::XML::i8->new($user_id_1),
