@@ -100,6 +100,9 @@ sub new {
         debug   => $debug,
     };
 
+    # AfinimaKi, 5 seconds it's all you get!
+    $cli->timeout(5);
+
     bless $self, $class;
 
     return $self;
@@ -284,7 +287,7 @@ sub get_recommendations {
     $api->add_to_wishlist($user_id, $item_id);
 
     The given $item_id will be added do user's wishlist. This means that id will not
-    be in the user's recommentation list anymore. 
+    be in the user's recommentation list anymore, and the action will be use to tune users's recommendations (The user seems to like this item).
 
 =cut
 
@@ -305,7 +308,7 @@ sub add_to_wishlist {
     $api->add_to_blacklist($user_id, $item_id);
 
     The given $item_id will be added do user's blacklist. This means that id will not
-    be in the user's recommentation list anymore. 
+    be in the user's recommentation list anymore, and the action will be use to tune users's recommendations (The user seems to dislike this item). 
 
 =cut
 
@@ -319,6 +322,27 @@ sub add_to_blacklist {
         RPC::XML::i8->new($item_id),
     );
 }
+
+
+=head3 remove_from_lists 
+
+    $api->remove_from_lists($user_id, $item_id);
+
+    Remove the given item from user's wish and black lists, and also removes user item's rating (if any).
+
+=cut
+
+sub remove_from_lists {
+    my ($self, $user_id, $item_id) = @_;
+    return undef if ! $user_id || ! $item_id;
+
+    return $self->send_request(
+        'remove_from_lists', 
+        RPC::XML::i8->new($user_id),
+        RPC::XML::i8->new($item_id),
+    );
+}
+
 
 =head2 user-user services
 
