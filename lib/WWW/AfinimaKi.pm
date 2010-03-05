@@ -101,7 +101,7 @@ sub new {
     };
 
     # AfinimaKi, 5 seconds it's all you get!
-    $cli->timeout(5);
+    $self->{cli}->timeout(5);
 
     bless $self, $class;
 
