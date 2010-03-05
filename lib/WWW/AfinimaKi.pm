@@ -178,8 +178,7 @@ sub set_rate {
         'set_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
-        RPC::XML::i4->new($rate),
-        RPC::XML::boolean->new(1),
+        RPC::XML::double->new($rate),
     );
 }
 
