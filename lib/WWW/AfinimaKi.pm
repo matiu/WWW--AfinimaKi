@@ -9,8 +9,8 @@ use Carp;
 
 our $VERSION = '0.3';
 
-use constant KEY_LENGTH => 32;
-use constant TIME_DIV   => 12;
+use constant KEY_LENGTH     => 32;
+use constant TIME_SHIFT     => 10;
 
 =head1 NAME
 
@@ -118,8 +118,10 @@ sub _auth_code {
         $self->{secret} 
         . $method 
         . $first_arg 
-        . int( time() / TIME_DIV )
+        . int( time() >> TIME_SHIFT )
         ;
+
+    #print STDERR "CODE: $code\n" if $self->{debug};
 
     return md5_hex( $code );
 }
