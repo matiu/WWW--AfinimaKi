@@ -7,7 +7,7 @@ use Digest::MD5	qw(md5_hex);
 use Encode;
 use Carp;
 
-our $VERSION = '0.2';
+our $VERSION = '0.3';
 
 use constant KEY_LENGTH => 32;
 use constant TIME_DIV   => 12;
@@ -434,7 +434,10 @@ Copyright (c) 2010 Matias Alejo Garcia. All rights reserved.  This program is fr
 
 =head1 SUPPORT / WARRANTY
 
-The WWW::AfinimaKi is free Open Source software. IT COMES WITHOUT WARRANTY OF ANY KIND.
+The WWW::AfinimaKi is free Open Source software. IT COMES WITHOUT WARRANTY OF ANY KIND. 
+
+Github repository is at http://github.com/matiu/WWW--AfinimaKi
+
 
 =head1 BUGS
 
