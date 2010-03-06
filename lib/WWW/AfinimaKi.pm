@@ -124,6 +124,19 @@ sub _auth_code {
     return md5_hex( $code );
 }
 
+sub _is_error {
+    my ($r) = @_;
+
+    if ( !$r ) {
+        return 1;
+    }
+    elsif ( $r->is_fault()) {
+        carp __PACKAGE__ . " Error: ". $r->string;
+        return 1;
+    }
+    return 0;
+}
+
 sub send_request {
     my ($self, $method, @args) = @_;
 
@@ -151,10 +164,9 @@ sub send_request {
     if (ref($r)) {
         return $r;
     }
-    else {
-        carp $r;
-        return undef;
-    }
+
+    carp $r;
+    return undef;
 }
 
 
@@ -174,12 +186,15 @@ sub set_rate {
     my ($self, $user_id, $item_id, $rate) = @_;
     return undef if ! $user_id || ! $item_id || ! defined ($rate);
 
-    return $self->send_request(
+    my $r = $self->send_request(
         'set_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
         RPC::XML::double->new($rate),
     );
+    return undef if _is_error($r);
+
+    return $r;
 }
 
 
@@ -201,9 +216,7 @@ sub estimate_rate {
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
-
-    return undef if ! $r;
-
+    return undef if _is_error($r);
 
     return 1.0 * $r->value;
 }
@@ -237,7 +250,7 @@ sub estimate_multiple_rates {
                     } @item_ids
                 )
         );
-    return undef if ! $r;
+    return undef if _is_error($r);
     
     my $ret = {}; 
     my $i = 0;
@@ -247,7 +260,6 @@ sub estimate_multiple_rates {
 
     return $ret;
 }
-
 
 =head3 get_recommendations 
 
@@ -271,7 +283,7 @@ sub get_recommendations {
         RPC::XML::i8->new($user_id),
         RPC::XML::boolean->new(0),
     );
-    return undef if ! $r;
+    return undef if _is_error($r);
 
     return [
         map { {
@@ -294,11 +306,14 @@ sub add_to_wishlist {
     my ($self, $user_id, $item_id) = @_;
     return undef if ! $user_id || ! $item_id;
 
-    return $self->send_request(
+    my $r =  $self->send_request(
         'add_to_wishlist', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
+    return undef if _is_error($r);
+
+    return $r;
 }
 
 
@@ -315,11 +330,14 @@ sub add_to_blacklist {
     my ($self, $user_id, $item_id) = @_;
     return undef if ! $user_id || ! $item_id;
 
-    return $self->send_request(
+    my $r =  $self->send_request(
         'add_to_blacklist', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
+    return undef if _is_error($r);
+
+    return $r;
 }
 
 
@@ -335,11 +353,14 @@ sub remove_from_lists {
     my ($self, $user_id, $item_id) = @_;
     return undef if ! $user_id || ! $item_id;
 
-    return $self->send_request(
+    my $r = $self->send_request(
         'remove_from_lists', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
     );
+    return undef if _is_error($r);
+
+    return $r;
 }
 
 
@@ -362,7 +383,7 @@ sub get_user_user_afinimaki {
         RPC::XML::i8->new($user_id_1),
         RPC::XML::i8->new($user_id_2),
     );
-    return undef if ! $r;
+    return undef if _is_error($r);
 
     return 1.0 * $r->value;
 }
@@ -389,8 +410,7 @@ sub get_soul_mates {
         'get_soul_mates', 
         RPC::XML::i8->new($user_id),
     );
-
-    return undef if ! $r;
+    return undef if _is_error($r);
 
     return [
         map { {
