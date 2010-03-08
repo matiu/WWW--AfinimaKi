@@ -1,0 +1,5 @@
+README
+Changes
+Makefile.PL
+lib/WWW/AfinimaKi.pm
+t/01_object.tl
