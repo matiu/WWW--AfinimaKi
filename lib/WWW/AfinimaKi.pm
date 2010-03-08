@@ -7,7 +7,7 @@ use Digest::MD5	qw(md5_hex);
 use Encode;
 use Carp;
 
-our $VERSION = '0.3';
+our $VERSION = '0.4';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;

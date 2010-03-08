@@ -4,7 +4,7 @@ use 5.8.0;
 
 WriteMakefile(
 	NAME            => 'WWW::AfinimaKi',
-	VERSION_FROM    => 'lib/WWW/Afinimaki.pm',
+	VERSION_FROM    => 'lib/WWW/AfinimaKi.pm',
 	AUTHOR			=> 'Matias Alejo Garcia ( matiu@cpan.org ) ',
 	ABSTRACT		=> 'A AfinimaKi Recommendating Engine Client',
     PREREQ_PM 	   	=> {
