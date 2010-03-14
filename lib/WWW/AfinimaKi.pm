@@ -248,7 +248,7 @@ sub set_rate {
     );
     return undef if _is_error($r);
 
-    return $r;
+    return 1.0 * $r->value;
 }
 
 
@@ -369,7 +369,7 @@ sub add_to_wishlist {
     );
     return undef if _is_error($r);
 
-    return $r;
+    return 1.0 * $r->value;
 }
 
 
@@ -388,7 +388,7 @@ sub add_to_blacklist {
     );
     return undef if _is_error($r);
 
-    return $r;
+    return 1.0 * $r->value;
 }
 
 
@@ -406,7 +406,7 @@ sub remove_from_lists {
     );
     return undef if _is_error($r);
 
-    return $r;
+    return 1.0 * $r->value;
 }
 
 
