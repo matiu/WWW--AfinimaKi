@@ -7,7 +7,7 @@ use Digest::MD5	qw(md5_hex);
 use Encode;
 use Carp;
 
-our $VERSION = '0.4';
+our $VERSION = '0.5';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
@@ -40,7 +40,8 @@ WWW::AfinimaKi - AfinimaKi Recommendation Engine Client
 
 =head1 DESCRIPTION
 
-WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. Check http://www.afinimaki.com/api for more details.
+WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. 
+Check http://www.afinimaki.com for more details.
 
 =head1 Methods
 
@@ -56,9 +57,13 @@ WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. Check ht
         die "Error construction afinimaki, wrong keys length?";
     }
 
-    new Construct the AfinimaKi object. No nework traffic is generated (the account credentialas are not checked at this point). 
+    new Construct the AfinimaKi object. No network traffic is 
+    generated (the account credentialas are not checked at this point). 
 
-    The given keys must be 32 character long. You can get them at afinimaki.com. Debug level can be 0 or 1.
+    The given keys must be 32 character long. You can get them at 
+    www.afinimaki.com 
+    
+    Debug level can be 0 or 1.
 
 =cut
 
@@ -178,21 +183,30 @@ sub send_request {
 
     $api->set_rate($user_id, $item_id, $rate);
 
-    Stores a rate in the server. Waits until the call has ended.
+    or 
+
+    $api->set_rate($user_id, $item_id, $rate, $ts);
+
+    Stores a rate in the server. Waits until the call has 
+    ended. $ts is the unix timestamp when the action was
+    done ( if set to 0 means 'now')
 
     On error, returns undef, and carp the RPC::XML error.
 
 =cut
 
 sub set_rate {
-    my ($self, $user_id, $item_id, $rate) = @_;
+    my ($self, $user_id, $item_id, $rate, $ts) = @_;
     return undef if ! $user_id || ! $item_id || ! defined ($rate);
+
+    $ts ||=0;
 
     my $r = $self->send_request(
         'set_rate', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
         RPC::XML::double->new($rate),
+        RPC::XML::i4->new($ts),
     );
     return undef if _is_error($r);
 
@@ -204,7 +218,9 @@ sub set_rate {
 
     my $estimated_rate = $api->estimate_rate($user_id, $item_id);
 
-    Estimate a rate. Undef is returned if the rate could not be estimated (usually because the given user or the given item does not have many rates).
+    Estimate a rate. Undef is returned if the rate could not 
+    be estimated (usually because the given user or the given 
+    item does not have many rates).
 
     On error, returns undef, and carp the RPC::XML error.
 =cut
@@ -228,11 +244,15 @@ sub estimate_rate {
 =head3 estimate_multiple_rates
 
     my $rates_hashref = $api->estimate_rate($user_id, @item_ids);
-        foreach my $item_id (keys %$rates_hashref) {
-        print "Estimated rate for $item_id is $rates_hashref->{$item_id}\n";
+
+    foreach my $item_id (keys %$rates_hashref) {
+        print "Estimated rate for $item_id is 
+            $rates_hashref->{$item_id}\n";
     }
 
-    Estimate multimple rates. The returned hash has the structure: 
+    Estimate multimple rates. The returned hash has 
+    the structure: 
+
             item_id => estimated_rate
 
     On error, returns undef, and carp the RPC::XML error.
@@ -268,11 +288,13 @@ sub estimate_multiple_rates {
     my $recommendations = $api->get_recommendations($user_id);
 
     foreach (@$recommendations) {
-        print "item_id: $_->{item_id} estimated_rate: $_->{estimated_rate}\n";
+        print "item_id: $_->{item_id} 
+                estimated_rate: $_->{estimated_rate}\n";
     }
 
-    Get a list of user's recommentations, based on users' and community previous rates.
-    Recommendations does not include rated or marked items (in the whish or black list).
+    Get a list of user's recommentations, based on users' 
+    and community previous rates.  Recommendations does not 
+    include rated or marked items (in the whish or black list).
 
 =cut
 
@@ -299,19 +321,28 @@ sub get_recommendations {
 
     $api->add_to_wishlist($user_id, $item_id);
 
-    The given $item_id will be added do user's wishlist. This means that id will not
-    be in the user's recommentation list anymore, and the action will be use to tune users's recommendations (The user seems to like this item).
+    or 
+
+    $api->add_to_wishlist($user_id, $item_id, $ts);
+
+    The given $item_id will be added do user's wishlist. This 
+    means that id will not be in the user's recommentation list 
+    anymore, and the action will be use to tune users's 
+    recommendations (The user seems to like this item).
 
 =cut
 
 sub add_to_wishlist {
-    my ($self, $user_id, $item_id) = @_;
+    my ($self, $user_id, $item_id, $ts) = @_;
     return undef if ! $user_id || ! $item_id;
+
+    $ts ||= 0;
 
     my $r =  $self->send_request(
         'add_to_wishlist', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
+        RPC::XML::i4->new($ts),
     );
     return undef if _is_error($r);
 
@@ -323,19 +354,28 @@ sub add_to_wishlist {
 
     $api->add_to_blacklist($user_id, $item_id);
 
-    The given $item_id will be added do user's blacklist. This means that id will not
-    be in the user's recommentation list anymore, and the action will be use to tune users's recommendations (The user seems to dislike this item). 
+    or 
+
+    $api->add_to_blacklist($user_id, $item_id, $ts);
+
+    The given $item_id will be added do user's blacklist. This 
+    means that id will not be in the user's recommentation list 
+    anymore, and the action will be use to tune users's 
+    recommendations (The user seems to dislike this item). 
 
 =cut
 
 sub add_to_blacklist {
-    my ($self, $user_id, $item_id) = @_;
+    my ($self, $user_id, $item_id, $ts) = @_;
     return undef if ! $user_id || ! $item_id;
+
+    $ts ||=0;
 
     my $r =  $self->send_request(
         'add_to_blacklist', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
+        RPC::XML::i4->new($ts),
     );
     return undef if _is_error($r);
 
@@ -347,18 +387,26 @@ sub add_to_blacklist {
 
     $api->remove_from_lists($user_id, $item_id);
 
-    Remove the given item from user's wish and black lists, and also removes user item's rating (if any).
+    or 
+
+    $api->remove_from_lists($user_id, $item_id, $ts);
+
+    Remove the given item from user's wish and black lists, 
+    and also removes user item's rating (if any).
 
 =cut
 
 sub remove_from_lists {
-    my ($self, $user_id, $item_id) = @_;
+    my ($self, $user_id, $item_id, $ts) = @_;
     return undef if ! $user_id || ! $item_id;
+
+    $ts ||=0;
 
     my $r = $self->send_request(
         'remove_from_lists', 
         RPC::XML::i8->new($user_id),
         RPC::XML::i8->new($item_id),
+        RPC::XML::i4->new($ts),
     );
     return undef if _is_error($r);
 
@@ -370,7 +418,8 @@ sub remove_from_lists {
 
 =head3 get_user_user_afinimaki 
 
-    my $afinimaki = $api->get_user_user_afinimaki($user_id_1, $user_id_2);
+    my $afinimaki = 
+        $api->get_user_user_afinimaki($user_id_1, $user_id_2);
 
     Gets user vs user afinimaki. AfinimaKi range is [0.0-1.0].
 
@@ -397,10 +446,12 @@ sub get_user_user_afinimaki {
     my $soul_mates = $api->get_soul_mates($user_id);
 
     foreach (@$soul_mates) {
-        print "user_id: $_->{user_id} afinimaki: $_->{afinimaki}\n";
+        print "user_id: $_->{user_id} 
+                afinimaki: $_->{afinimaki}\n";
     }
 
-    Get a list of user's soul mates (users with similar tastes). AfinimaKi range is [0.0-1.0].
+    Get a list of user's soul mates (users with similar 
+    tastes). AfinimaKi range is [0.0-1.0].
 
 =cut
 
@@ -432,11 +483,14 @@ WWW::AfinimaKi by Matias Alejo Garcia (matiu at cpan.org)
 
 =head1 COPYRIGHT
 
-Copyright (c) 2010 Matias Alejo Garcia. All rights reserved.  This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+Copyright (c) 2010 Matias Alejo Garcia. All rights reserved.  
+This program is free software; you can redistribute it and/or 
+modify it under the same terms as Perl itself.
 
 =head1 SUPPORT / WARRANTY
 
-The WWW::AfinimaKi is free Open Source software. IT COMES WITHOUT WARRANTY OF ANY KIND. 
+The WWW::AfinimaKi is free Open Source software. IT COMES 
+WITHOUT WARRANTY OF ANY KIND. 
 
 Github repository is at http://github.com/matiu/WWW--AfinimaKi
 
