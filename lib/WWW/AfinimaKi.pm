@@ -7,7 +7,7 @@ use Digest::MD5	qw(md5_hex);
 use Encode;
 use Carp;
 
-our $VERSION = '0.5';
+our $VERSION = '0.51';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
@@ -179,20 +179,58 @@ sub send_request {
 
 =head2 user-item services
 
-=head3 set_rate
+
+=head3 set_rate_, add_to_wishlist, add_to_blacklist, remove_from_lists
 
     $api->set_rate($user_id, $item_id, $rate);
-
-    or 
-
     $api->set_rate($user_id, $item_id, $rate, $ts);
 
-    Stores a rate in the server. Waits until the call has 
-    ended. $ts is the unix timestamp when the action was
-    done ( if set to 0 means 'now')
+    $api->add_to_wishlist($user_id, $item_id);
+    $api->add_to_wishlist($user_id, $item_id, $ts);
 
-    On error, returns undef, and carp the RPC::XML error.
+    $api->add_to_blacklist($user_id, $item_id);
+    $api->add_to_blacklist($user_id, $item_id, $ts);
 
+    $api->remove_from_lists($user_id, $item_id);
+
+    All calls wait until the call has ended. 
+    
+    $ts is the unix timestamp when the action was done 
+    (if $ts is not given, the action was performed now).
+
+    On error, return is undef, and the RPC::XML error will be carp'ed.
+
+    On success, the returned values are:
+    1: The rate was inserted 
+    2: The rate existed previous, and it was NOT modified 
+    3: The rate existed previous, and it was updated by 
+       this call
+
+=head4 set_rate 
+
+    Stores a rate in the server 
+
+=head4 add_to_wishlist
+
+    Adds the given $item_id to user's wishlist. This 
+    means that id will not be in the user's recommentation 
+    list, and the action will be use to tune users's 
+    recommendations (The user seems to like this item).
+
+=head4 add_to_blacklist
+
+
+    Adds the given $item_id to user's blacklist. This 
+    means that id will not be in the user's recommentation 
+    list, and the action will be use to tune users's 
+    recommendations (The user seems to dislike this item).
+
+=head4 remove_from_lists Stores a rate in the server. 
+
+    Removes the given item from user's wish and black lists, 
+    and also removes user item's rating (if any).
+
+   
 =cut
 
 sub set_rate {
@@ -317,21 +355,6 @@ sub get_recommendations {
     ];
 }
 
-=head3 add_to_wishlist
-
-    $api->add_to_wishlist($user_id, $item_id);
-
-    or 
-
-    $api->add_to_wishlist($user_id, $item_id, $ts);
-
-    The given $item_id will be added do user's wishlist. This 
-    means that id will not be in the user's recommentation list 
-    anymore, and the action will be use to tune users's 
-    recommendations (The user seems to like this item).
-
-=cut
-
 sub add_to_wishlist {
     my ($self, $user_id, $item_id, $ts) = @_;
     return undef if ! $user_id || ! $item_id;
@@ -350,20 +373,6 @@ sub add_to_wishlist {
 }
 
 
-=head3 add_to_blacklist
-
-    $api->add_to_blacklist($user_id, $item_id);
-
-    or 
-
-    $api->add_to_blacklist($user_id, $item_id, $ts);
-
-    The given $item_id will be added do user's blacklist. This 
-    means that id will not be in the user's recommentation list 
-    anymore, and the action will be use to tune users's 
-    recommendations (The user seems to dislike this item). 
-
-=cut
 
 sub add_to_blacklist {
     my ($self, $user_id, $item_id, $ts) = @_;
@@ -382,19 +391,6 @@ sub add_to_blacklist {
     return $r;
 }
 
-
-=head3 remove_from_lists 
-
-    $api->remove_from_lists($user_id, $item_id);
-
-    or 
-
-    $api->remove_from_lists($user_id, $item_id, $ts);
-
-    Remove the given item from user's wish and black lists, 
-    and also removes user item's rating (if any).
-
-=cut
 
 sub remove_from_lists {
     my ($self, $user_id, $item_id, $ts) = @_;
