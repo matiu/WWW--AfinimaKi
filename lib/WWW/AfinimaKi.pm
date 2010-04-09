@@ -3,11 +3,11 @@ use strict;
 
 require RPC::XML;
 require RPC::XML::Client;
-use Digest::MD5	qw(md5_hex);
+use Digest::SHA	qw(hmac_sha256_hex);
 use Encode;
 use Carp;
 
-our $VERSION = '0.51';
+our $VERSION = '0.60';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
@@ -103,6 +103,11 @@ sub new {
         secret  => $secret,
         cli     => RPC::XML::Client->new($url),
         debug   => $debug,
+        secret_bin => pack( 'H2' x 16, 
+                                        grep { $_ }
+                                        split /(..)/ , 
+                                        $secret
+                        ),
     };
 
     # AfinimaKi, 5 seconds it's all you get!
@@ -120,15 +125,15 @@ sub _auth_code {
     $first_arg ||= '';
 
     my $code = 
-        $self->{secret} 
-        . $method 
+        $method 
         . $first_arg 
         . int( time() >> TIME_SHIFT )
         ;
 
     #print STDERR "CODE: $code\n" if $self->{debug};
 
-    return md5_hex( $code );
+    return hmac_sha256_hex( $code, $self->{secret_bin}  );
+        
 }
 
 sub _is_error {
