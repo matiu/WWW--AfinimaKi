@@ -7,7 +7,7 @@ use Digest::SHA	qw(hmac_sha256_hex);
 use Encode;
 use Carp;
 
-our $VERSION = '0.60';
+our $VERSION = '0.70';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
@@ -25,23 +25,39 @@ WWW::AfinimaKi - AfinimaKi Recommendation Engine Client
 
     ...
 
-    $api->set_rate($user_id, $item_id, $rate);
+    $api->set_rate($email_sha256, $item_id, $rate, $user_id);
 
     ...
 
-    my $estimated_rate = $api->estimate_rate($user_id, $rate);
+    my $estimated_rate = $api->estimate_rate($email_sha256, $rate);
 
     ...
 
-    my $recommendations = $api->get_recommendations($user_id);
+    my $recommendations = $api->get_recommendations($email_sha256);
     foreach (@$recommendations) {
         print "item_id: $_->{item_id} estimated_rate: $_->{estimated_rate}\n";
+    }
+
+    ...
+
+    my $recommendations = $api->get_recommendations($email_sha256);
+    foreach (@$recommendations) {
+        print "item_id: $_->{item_id} estimated_rate: $_->{estimated_rate}\n";
+    }
+
+    ...
+
+    my $soul_mates = $api->get_soul_mates($email_sha256);
+    foreach (@$soul_mates) {
+        print "user_id: $_->{user_id} afinimaki: $_->{afinamki} email_sha256: $_->{email_sha256}\n";
     }
 
 =head1 DESCRIPTION
 
 WWW::AfinimaKi is a simple client for the AfinimaKi Recommendation API. 
 Check http://www.afinimaki.com for more details.
+
+All functions use an email digest of your users, in orden to maintain their privacy. The digest function is SHA256. You can generate the digest with the function sha256_hex from the module Digest::SHA.
 
 =head1 Methods
 
@@ -187,29 +203,33 @@ sub send_request {
 
 =head3 set_rate_, add_to_wishlist, add_to_blacklist, remove_from_lists
 
-    $api->set_rate($user_id, $item_id, $rate);
-    $api->set_rate($user_id, $item_id, $rate, $ts);
+    $api->set_rate($email_sha256, $item_id, $rate);
+    $api->set_rate($email_sha256, $item_id, $rate, $ts);
+    $api->set_rate($email_sha256, $item_id, $rate, $ts, $user_id);
 
-    $api->add_to_wishlist($user_id, $item_id);
-    $api->add_to_wishlist($user_id, $item_id, $ts);
+    $api->add_to_wishlist($email_sha256, $item_id);
+    $api->add_to_wishlist($email_sha256, $item_id, $ts);
 
-    $api->add_to_blacklist($user_id, $item_id);
-    $api->add_to_blacklist($user_id, $item_id, $ts);
+    $api->add_to_blacklist($email_sha256, $item_id);
+    $api->add_to_blacklist($email_sha256, $item_id, $ts);
 
-    $api->remove_from_lists($user_id, $item_id);
+    $api->remove_from_lists($email_sha256, $item_id);
 
-    All calls wait until the call has ended. 
-    
     $ts is the unix timestamp when the action was done 
     (if $ts is not given, the action was performed now).
 
-    On error, return is undef, and the RPC::XML error will be carp'ed.
+    user_id is optional. It will indicate the API to store your user_id
+    in the DB, besides the email_sha256. The, functions like get_soul_mates 
+    can return you back your user's ID (besides de email_sha256).
 
+    All calls wait until the RPC call has ended. 
+    On error, return is undef, and the RPC::XML error will be carp'ed.
     On success, the returned values are:
     1: The rate was inserted 
     2: The rate existed previous, and it was NOT modified 
     3: The rate existed previous, and it was updated by 
        this call
+    -1: Error in parameters
 
 =head4 set_rate 
 
@@ -239,17 +259,16 @@ sub send_request {
 =cut
 
 sub set_rate {
-    my ($self, $user_id, $item_id, $rate, $ts) = @_;
-    return undef if ! $user_id || ! $item_id || ! defined ($rate);
-
-    $ts ||=0;
+    my ($self, $email_sha256, $item_id, $rate, $ts, $user_id) = @_;
+    return undef if ! $email_sha256 || ! $item_id || ! defined ($rate);
 
     my $r = $self->send_request(
         'set_rate', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($item_id),
         RPC::XML::double->new($rate),
-        RPC::XML::i4->new($ts),
+        RPC::XML::i4->new($ts || 0),
+        RPC::XML::i8->new($user_id || 0),
     );
     return undef if _is_error($r);
 
@@ -259,7 +278,7 @@ sub set_rate {
 
 =head3 estimate_rate
 
-    my $estimated_rate = $api->estimate_rate($user_id, $item_id);
+    my $estimated_rate = $api->estimate_rate($email_sha256, $item_id);
 
     Estimate a rate. Undef is returned if the rate could not 
     be estimated (usually because the given user or the given 
@@ -269,12 +288,12 @@ sub set_rate {
 =cut
 
 sub estimate_rate {
-    my ($self, $user_id,  $item_id) = @_;
-    return undef if ! $user_id || ! $item_id;
+    my ($self, $email_sha256,  $item_id) = @_;
+    return undef if ! $email_sha256 || ! $item_id;
 
     my $r = $self->send_request(
         'estimate_rate', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($item_id),
     );
     return undef if _is_error($r);
@@ -286,7 +305,7 @@ sub estimate_rate {
 
 =head3 estimate_multiple_rates
 
-    my $rates_hashref = $api->estimate_rate($user_id, @item_ids);
+    my $rates_hashref = $api->estimate_rate($email_sha256, @item_ids);
 
     foreach my $item_id (keys %$rates_hashref) {
         print "Estimated rate for $item_id is 
@@ -303,12 +322,12 @@ sub estimate_rate {
 =cut
 
 sub estimate_multiple_rates {
-    my ($self, $user_id,  @item_ids) = @_;
-    return undef if ! $user_id || ! @item_ids;
+    my ($self, $email_sha256,  @item_ids) = @_;
+    return undef if ! $email_sha256 || ! @item_ids;
 
     my $r = $self->send_request(
             'estimate_multiple_rates', 
-            RPC::XML::i8->new($user_id),
+            RPC::XML::i8->new($email_sha256),
             RPC::XML::array->new( 
                     map {
                         RPC::XML::i8->new($_)
@@ -328,7 +347,7 @@ sub estimate_multiple_rates {
 
 =head3 get_recommendations 
 
-    my $recommendations = $api->get_recommendations($user_id);
+    my $recommendations = $api->get_recommendations($email_sha256);
 
     foreach (@$recommendations) {
         print "item_id: $_->{item_id} 
@@ -342,15 +361,15 @@ sub estimate_multiple_rates {
 =cut
 
 sub get_recommendations {
-    my ($self, $user_id) = @_;
-    return undef if ! $user_id;
+    my ($self, $email_sha256) = @_;
+    return undef if ! $email_sha256;
 
     my $r = $self->send_request(
         'get_recommendations', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
         RPC::XML::boolean->new(0),
     );
-    return undef if _is_error($r);
+    return undef if _is_error($r) || ! ref($r);
 
     return [
         map { {
@@ -361,16 +380,15 @@ sub get_recommendations {
 }
 
 sub add_to_wishlist {
-    my ($self, $user_id, $item_id, $ts) = @_;
-    return undef if ! $user_id || ! $item_id;
-
-    $ts ||= 0;
+    my ($self, $email_sha256, $item_id, $ts, $user_id) = @_;
+    return undef if ! $email_sha256 || ! $item_id;
 
     my $r =  $self->send_request(
         'add_to_wishlist', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($item_id),
-        RPC::XML::i4->new($ts),
+        RPC::XML::i4->new($ts || 0),
+        RPC::XML::i8->new($user_id || 0),
     );
     return undef if _is_error($r);
 
@@ -380,16 +398,15 @@ sub add_to_wishlist {
 
 
 sub add_to_blacklist {
-    my ($self, $user_id, $item_id, $ts) = @_;
-    return undef if ! $user_id || ! $item_id;
-
-    $ts ||=0;
+    my ($self, $email_sha256, $item_id, $ts, $user_id) = @_;
+    return undef if ! $email_sha256 || ! $item_id;
 
     my $r =  $self->send_request(
         'add_to_blacklist', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($item_id),
-        RPC::XML::i4->new($ts),
+        RPC::XML::i4->new($ts || 0),
+        RPC::XML::i8->new($user_id || 0),
     );
     return undef if _is_error($r);
 
@@ -398,16 +415,15 @@ sub add_to_blacklist {
 
 
 sub remove_from_lists {
-    my ($self, $user_id, $item_id, $ts) = @_;
-    return undef if ! $user_id || ! $item_id;
-
-    $ts ||=0;
+    my ($self, $email_sha256, $item_id, $ts, $user_id) = @_;
+    return undef if ! $email_sha256 || ! $item_id;
 
     my $r = $self->send_request(
         'remove_from_lists', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($item_id),
-        RPC::XML::i4->new($ts),
+        RPC::XML::i4->new($ts || 0),
+        RPC::XML::i8->new($user_id || 0),
     );
     return undef if _is_error($r);
 
@@ -420,20 +436,20 @@ sub remove_from_lists {
 =head3 get_user_user_afinimaki 
 
     my $afinimaki = 
-        $api->get_user_user_afinimaki($user_id_1, $user_id_2);
+        $api->get_user_user_afinimaki($email_sha256_user_1, $email_sha256_user_2);
 
     Gets user vs user afinimaki. AfinimaKi range is [0.0-1.0].
 
 =cut
 
 sub get_user_user_afinimaki {
-    my ($self, $user_id_1,  $user_id_2) = @_;
-    return undef if ! $user_id_1 || ! $user_id_2;
+    my ($self, $email_sha256_1,  $email_sha256_2) = @_;
+    return undef if ! $email_sha256_1 || ! $email_sha256_2;
     
     my $r = $self->send_request(
         'get_user_user_afinimaki', 
-        RPC::XML::i8->new($user_id_1),
-        RPC::XML::i8->new($user_id_2),
+        RPC::XML::string->new($email_sha256_1),
+        RPC::XML::string->new($email_sha256_2),
     );
     return undef if _is_error($r);
 
@@ -444,32 +460,38 @@ sub get_user_user_afinimaki {
 
 =head3 get_soul_mates 
 
-    my $soul_mates = $api->get_soul_mates($user_id);
+    my $soul_mates = $api->get_soul_mates($email_sha256);
 
     foreach (@$soul_mates) {
         print "user_id: $_->{user_id} 
-                afinimaki: $_->{afinimaki}\n";
+                afinimaki: $_->{afinimaki}
+                email_sha: $_->{email_sha256}
+                \n";
     }
 
     Get a list of user's soul mates (users with similar 
     tastes). AfinimaKi range is [0.0-1.0].
 
+    Note that user_id in the results will ONLY be filled if you have 
+    upload you user_id's using set_rate or a similar function.
+
 =cut
 
 sub get_soul_mates {
-    my ($self, $user_id) = @_;
-    return undef if ! $user_id;
+    my ($self, $email_sha256) = @_;
+    return undef if ! $email_sha256;
 
     my $r = $self->send_request(
         'get_soul_mates', 
-        RPC::XML::i8->new($user_id),
+        RPC::XML::string->new($email_sha256),
     );
-    return undef if _is_error($r);
+    return undef if _is_error($r) || ! ref($r);
 
     return [
         map { {
-            user_id         => 1   * $_->[0]->value,
+            email_sha256    => $_->[0]->value,
             afinimaki       => 1.0 * $_->[1]->value,
+            user_id         => 1   * ($_->[2]->value || 0),
         } } @$r
     ];
 }
