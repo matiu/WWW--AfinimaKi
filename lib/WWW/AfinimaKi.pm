@@ -369,7 +369,9 @@ sub get_recommendations {
         RPC::XML::string->new($email_sha256),
         RPC::XML::boolean->new(0),
     );
-    return undef if _is_error($r) || ! ref($r);
+    return undef if _is_error($r);
+    
+    return [] if ref($r) ne 'ARRAY';
 
     return [
         map { {
@@ -485,7 +487,9 @@ sub get_soul_mates {
         'get_soul_mates', 
         RPC::XML::string->new($email_sha256),
     );
-    return undef if _is_error($r) || ! ref($r);
+    return undef if _is_error($r);
+
+    return [] if ref($r) ne 'ARRAY';
 
     return [
         map { {
