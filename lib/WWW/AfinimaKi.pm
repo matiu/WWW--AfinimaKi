@@ -8,7 +8,7 @@ use Encode;
 use Carp;
 use Data::Dumper;
 
-our $VERSION = '0.70';
+our $VERSION = '0.71';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
@@ -181,8 +181,6 @@ sub send_request {
         ) 
         . ")\n"
         if $self->{debug};
-
-print Dumper \@args;        
 
     my $r = $self->{cli}->send_request(
         $method,
@@ -364,7 +362,7 @@ sub remove_from_lists {
 =cut
 
 sub estimate_rate {
-    my ($self, $email_sha256,  $item_id) = @_;
+    my ($self, $email_sha256, $item_id) = @_;
     return undef if ! $email_sha256 || ! $item_id;
 
     my $r = $self->send_request(
@@ -372,6 +370,7 @@ sub estimate_rate {
         RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($item_id),
     );
+
     return undef if _is_error($r);
 
     return 1.0 * $r->value;
@@ -446,8 +445,10 @@ sub get_recommendations {
         RPC::XML::boolean->new(0),
     );
     return undef if _is_error($r);
+
+#print __PACKAGE__ .":". Dumper $r;    
     
-    return [] if ref($r) ne 'ARRAY';
+    return [] if ref($r) ne 'RPC::XML::array';
 
     return [
         map { {
@@ -513,7 +514,7 @@ sub get_soul_mates {
     );
     return undef if _is_error($r);
 
-    return [] if ref($r) ne 'ARRAY';
+    return [] if ref($r) ne 'RPC::XML::array';
 
     return [
         map { {
