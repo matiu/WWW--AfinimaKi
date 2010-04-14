@@ -398,7 +398,7 @@ sub estimate_multiple_rates {
 
     my $r = $self->send_request(
             'estimate_multiple_rates', 
-            RPC::XML::i8->new($email_sha256),
+            RPC::XML::string->new($email_sha256),
             RPC::XML::array->new( 
                     map {
                         RPC::XML::i8->new($_)
