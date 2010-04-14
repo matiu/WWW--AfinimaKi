@@ -13,6 +13,12 @@ our $VERSION = '0.71';
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
 
+## Exportable Constants
+sub OP_CODE_ADD_TO_WISHLIST { return 0; }
+sub OP_CODE_ADD_TO_BLACKLIST { return 1; }
+sub OP_CODE_REMOVE_FROM_LISTS { return 2; }
+sub OP_CODE_SET_RATE { return 3; }
+
 =head1 NAME
 
 WWW::AfinimaKi - AfinimaKi Recommendation Engine Client
@@ -206,31 +212,16 @@ sub send_request {
     $api->set_rate(
         $email_sha256, 
         $user_id,
-        [
-            {
-                item_id => $item_id1,
-                rate    => $rate1,
-                ts      => $ts1,
-            },
-            {
-                item_id => $item_id2,
-                rate    => $rate2,      # ts can be omited
-            },
-        ]
+        $item_id,
+        $rate,
+        $ts,
     );
 
     $api->add_to_wishlist(
         $email_sha256,
         $user_id,
-        [
-            {
-                item_id => $item_id1,
-            },
-            {   
-                item_id => $item_id2,
-                ts      => $ts2,
-            },
-        ]
+        $item_id,
+        $ts,
     );
 
     $api->add_to_blacklist( ... same as add_to_wishlist ...);
@@ -280,74 +271,79 @@ sub send_request {
 =cut
 
 sub set_rate {
-    my ($self, $email_sha256, $user_id,  $in_rates ) = @_;
-    return [] if ! $email_sha256 || ! $in_rates || ! @$in_rates;
-
-    my @rates;
-
-    foreach (@$in_rates) {
-        push @rates,
-            RPC::XML::struct->new(
-                item_id => RPC::XML::i8->new($_->{item_id} ),
-                ts      => RPC::XML::i4->new($_->{ts} || 0),
-                rate    => RPC::XML::double->new($_->{rate}),
-            );
-    }
+    my ($self, $email_sha256, $user_id,  $item_id, $rate, $ts ) = @_;
+    return [] if ! $email_sha256 || ! $rate || !$item_id ;
 
     my $r = $self->send_request(
         'set_rate', 
         RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($user_id || 0),
-        RPC::XML::array->new(@rates),
+        RPC::XML::i8->new($item_id),
+        RPC::XML::double->new($rate),
+        RPC::XML::i4->new($ts||0),
     );
+    return undef if _is_error($r);
 
-    return [] if _is_error($r);
-
-    return $r || [];
+    return $r;
 }
 
+sub generic_add {
+    my ($self, $method, $email_sha256, $user_id, $item_id, $ts ) = @_;
+    return undef if ! $email_sha256  || !$item_id ;
 
-sub non_seen_methods {
-    my ($self, $email_sha256, $user_id,  $in_ids, $method ) = @_;
-    return [] if ! $email_sha256 || ! $in_ids || ! @$in_ids || ! defined ($method);
-
-    my @ids;
-
-    foreach (@$in_ids) {
-        push @ids,
-            RPC::XML::struct->new(
-                item_id => RPC::XML::i8->new($_->{item_id} ),
-                ts      => RPC::XML::i4->new($_->{ts} || 0),
-            );
-    }
 
     my $r = $self->send_request(
         $method, 
         RPC::XML::string->new($email_sha256),
         RPC::XML::i8->new($user_id || 0),
-        RPC::XML::array->new(@ids),
+        RPC::XML::i8->new($item_id),
+        RPC::XML::i4->new($ts||0),
     );
+    return undef if _is_error($r);
 
-    return [] if _is_error($r);
-
-    return $r || [];
+    return $r->value;
 }
 
-
 sub add_to_wishlist {
-    return non_seen_methods(@_, "add_to_wishlist");
+    my $self = shift;
+    return $self->generic_add('add_to_wishlist', @_);
 }
 
 sub add_to_blacklist {
-    return non_seen_methods(@_, "add_to_blacklist");
+    my $self = shift;
+    return $self->generic_add('add_to_blacklist', @_);
 }
-
 
 sub remove_from_lists {
-    return non_seen_methods(@_, "remove_from_lists");
+    my $self = shift;
+    return $self->generic_add('remove_from_lists', @_);
 }
 
 
+sub set_rates_bulk {
+    my ($self, $rates ) = @_;
+    return [] if ! $rates || !@$rates ;
+
+    my $first_email = $rates->[0]->{email_SHA} || return [];
+
+    my @arg = map { RPC::XML::array->new(
+            RPC::XML::i4->new($_->{op_code}),
+            RPC::XML::string->new($_->{email_SHA}),
+            RPC::XML::i8->new($_->{user_id}),
+            RPC::XML::i8->new($_->{item_id}),
+            RPC::XML::i4->new($_->{ts} || 0),
+            RPC::XML::double->new($_->{rate} || 0),
+    ) } @$rates;
+
+    my $r = $self->send_request(
+        'set_rates_bulk', 
+        RPC::XML::string->new($first_email),
+        RPC::XML::array->new(@arg),
+    );
+    return undef if _is_error($r);
+
+    return $r;
+}
 
 
 =head3 estimate_rate
