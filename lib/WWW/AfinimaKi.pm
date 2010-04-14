@@ -26,7 +26,7 @@ WWW::AfinimaKi - AfinimaKi Recommendation Engine Client
 
     ...
 
-    $api->set_rate($email_sha256, $item_id, $rate, $user_id);
+    $api->set_rate($email_sha256, $user_id, $rates);
 
     ...
 
@@ -281,7 +281,7 @@ sub send_request {
 
 sub set_rate {
     my ($self, $email_sha256, $user_id,  $in_rates ) = @_;
-    return undef if ! $email_sha256 || ! $in_rates;
+    return [] if ! $email_sha256 || ! $in_rates || ! @$in_rates;
 
     my @rates;
 
@@ -301,15 +301,15 @@ sub set_rate {
         RPC::XML::array->new(@rates),
     );
 
-    return undef if _is_error($r);
+    return [] if _is_error($r);
 
-    return $r;
+    return $r || [];
 }
 
 
 sub non_seen_methods {
     my ($self, $email_sha256, $user_id,  $in_ids, $method ) = @_;
-    return undef if ! $email_sha256 || ! $in_ids || ! defined ($method);
+    return [] if ! $email_sha256 || ! $in_ids || ! @$in_ids || ! defined ($method);
 
     my @ids;
 
@@ -328,9 +328,9 @@ sub non_seen_methods {
         RPC::XML::array->new(@ids),
     );
 
-    return undef if _is_error($r);
+    return [] if _is_error($r);
 
-    return $r;
+    return $r || [];
 }
 
 
