@@ -409,9 +409,11 @@ sub estimate_multiple_rates {
     
     my $ret = {}; 
     my $i = 0;
-    foreach (@$r) {
-        $ret->{$item_ids[$i++]} = 1.0 * $_->value;
-    }
+    eval { 
+        foreach (@$r) {
+            $ret->{$item_ids[$i++]} = 1.0 * $_->value;
+        }
+    };
 
     return $ret;
 }
