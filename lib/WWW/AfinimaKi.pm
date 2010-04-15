@@ -335,11 +335,14 @@ sub set_rates_bulk {
             RPC::XML::double->new($_->{rate} || 0),
     ) } @$rates;
 
+    $self->{cli}->timeout(20);
     my $r = $self->send_request(
         'set_rates_bulk', 
         RPC::XML::string->new($first_email),
         RPC::XML::array->new(@arg),
     );
+    $self->{cli}->timeout(5);
+
     return undef if _is_error($r);
 
     return $r;
