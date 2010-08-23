@@ -133,8 +133,7 @@ sub new {
                         ),
     };
 
-    # AfinimaKi, 15 secs max
-    $self->{cli}->timeout(15);
+    $self->{cli}->timeout(60);
 
     bless $self, $class;
 
