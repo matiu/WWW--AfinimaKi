@@ -133,7 +133,7 @@ sub new {
                         ),
     };
 
-    $self->{cli}->timeout(60);
+    $self->{cli}->timeout(300);
 
     bless $self, $class;
 
