@@ -13,6 +13,7 @@ WriteMakefile(
             'RPC::XML'          => undef,
             'RPC::XML::Client'  => undef,
             'Encode'            => undef,
+            'Cache::Memcached::Fast' => undef,
         },
     MIN_PERL_VERSION => '5.8.0',
 );

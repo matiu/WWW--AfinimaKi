@@ -7,17 +7,26 @@ use Digest::SHA	qw(hmac_sha256_hex);
 use Encode;
 use Carp;
 use Data::Dumper;
+use Cache::Memcached::Fast;
+use Storable;
+use Digest::MD5	qw(md5_hex);
 
-our $VERSION = '0.71';
+our $VERSION = '0.80';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
+
+use constant  MAX_TS    => 1234567890;
+use constant  TIMEOUT   => 120;
+use constant  MEMC_TTL  => 1200;
 
 ## Exportable Constants
 sub OP_CODE_ADD_TO_WISHLIST { return 0; }
 sub OP_CODE_ADD_TO_BLACKLIST { return 1; }
 sub OP_CODE_REMOVE_FROM_LISTS { return 2; }
 sub OP_CODE_SET_RATE { return 3; }
+
+sub dbg { print STDERR __PACKAGE__ . ' '.  join(' ', @_)."\n"; }
 
 =head1 NAME
 
@@ -74,6 +83,7 @@ All functions use an email digest of your users, in orden to maintain their priv
                     api_key     => $your_api_key, 
                     api_secret  => $your_api_secret, 
                     debug       => $debug_level,
+                    memcached   => $memcached_server
     );
 
     if (!$api) {
@@ -133,7 +143,26 @@ sub new {
                         ),
     };
 
-    $self->{cli}->timeout(300);
+    if ( $args{memcached} ) {
+            $self->{memcached} = new Cache::Memcached::Fast({
+                    servers => [ { address =>  $args{memcached} },
+                    ],
+                    namespace           => 'afiniapi::',
+                    compress_threshold  => 100_000,
+                    max_failures        => 3,
+                    failure_timeout     => 5,
+                    nowait              => 1,
+                    hash_namespace      => 1,
+                    serialize_methods   => [ \&Storable::freeze, \&Storable::thaw ],
+                    max_size            => 512 * 1024,
+#                    utf8 => 1,
+            });
+
+        dbg "AFINIAPI: using $args{memcached}";
+        $self->{memcached}->set("test",1, MEMC_TTL) or dbg "AFINIAPI: memc server failed";
+    }
+
+    $self->{cli}->timeout(TIMEOUT);
 
     bless $self, $class;
 
@@ -177,29 +206,40 @@ sub send_request {
     my $val = $args[0] ? $args[0]->value : undef;
 
 
-    print STDERR __PACKAGE__ 
-        . "=> $method ("
-        . join(
-            ', ',  
-            map { $_->value } 
-            @args
-        ) 
-        . ")\n"
+    dbg ( $method,  map { $_->value } @args )
         if $self->{debug};
 
-    my $r = $self->{cli}->send_request(
-        $method,
-        $self->{key},
-        $self->_auth_code($method, $val),
-        @args
-    );
+    my $r;
+
+    eval {
+        $r = $self->{cli}->send_request(
+            $method,
+            $self->{key},
+            $self->_auth_code($method, $val),
+            @args
+        );
+    };
+    if ($@){
+        dbg  "ERROR: $@";
+    }
 
     if (ref($r)) {
         return $r;
     }
 
     carp $r;
+
     return undef;
+}
+
+sub _set_memc_ts {
+    my ($self, $email_sha256, $ts) = @_;
+
+    dbg "Storing last rate TS $ts";
+
+    if ( $self->{memcached} ) {
+        $self->{memcached}->set('last-rate-'.$email_sha256, $ts || MAX_TS, MEMC_TTL);
+    }
 }
 
 
@@ -281,6 +321,10 @@ sub set_rate {
         RPC::XML::double->new($rate),
         RPC::XML::i4->new($ts||0),
     );
+
+
+    $self->_set_memc_ts($email_sha256, $ts);
+
     return undef if _is_error($r);
 
     return $r;
@@ -298,8 +342,10 @@ sub generic_add {
         RPC::XML::i8->new($item_id),
         RPC::XML::i4->new($ts||0),
     );
-    return undef if _is_error($r);
 
+    $self->_set_memc_ts($email_sha256, $ts);
+
+    return undef if _is_error($r);
     return $r->value;
 }
 
@@ -334,15 +380,22 @@ sub set_rates_bulk {
             RPC::XML::double->new($_->{rate} || 0),
     ) } @$rates;
 
-    $self->{cli}->timeout(20);
     my $r = $self->send_request(
         'set_rates_bulk', 
         RPC::XML::string->new($first_email),
         RPC::XML::array->new(@arg),
     );
-    $self->{cli}->timeout(5);
 
     return undef if _is_error($r);
+
+    ## expire
+    if ($self->{memcached}) {
+        my %unique;
+        foreach (@$rates ) {
+            next if $unique{$_->{email_SHA}}++;
+            $self->_set_memc_ts($_->{email_SHA}); # No ts, => use MAX TS, expire all
+        }
+    }
 
     return $r;
 }
@@ -363,15 +416,44 @@ sub estimate_rate {
     my ($self, $email_sha256, $item_id) = @_;
     return undef if ! $email_sha256 || ! $item_id;
 
-    my $r = $self->send_request(
-        'estimate_rate', 
-        RPC::XML::string->new($email_sha256),
-        RPC::XML::i8->new($item_id),
-    );
+    my ($value, $from_cache, $ts);
 
-    return undef if _is_error($r);
+    if ($self->{memcached}) {
+        $ts = $self->{memcached}->get('last-rate-' . $email_sha256);
 
-    return 1.0 * $r->value;
+        if ($ts) {
+            $value =  $self->{memcached}->get("estimate-rate-$email_sha256-$item_id-$ts");
+
+            if ($value) {
+                $from_cache = 1;
+                dbg "AFINIAPI : restored in cache: $item_id";
+            }
+        }
+    }
+
+   if ( !$value ) {
+
+        my $r = $self->send_request(
+            'estimate_rate', 
+            RPC::XML::string->new($email_sha256),
+            RPC::XML::i8->new($item_id),
+        );
+
+        return undef if _is_error($r);
+
+        $value = 1.0 * $r->value;
+    }
+
+    if ($self->{memcached} && ! $from_cache) {
+        dbg "AFINIAPI : storing in cache $item_id : $value";
+
+        $self->{memcached}->set("estimate-rate-$email_sha256-$item_id-$^T",  $value, MEMC_TTL)
+            or dbg "memc server failed...";
+
+        $self->_set_memc_ts($email_sha256, $^T) if ! $ts;
+    }
+
+    return $value;
 }
 
 
@@ -398,24 +480,55 @@ sub estimate_multiple_rates {
     my ($self, $email_sha256,  @item_ids) = @_;
     return undef if ! $email_sha256 || ! @item_ids;
 
-    my $r = $self->send_request(
-            'estimate_multiple_rates', 
-            RPC::XML::string->new($email_sha256),
-            RPC::XML::array->new( 
-                    map {
-                        RPC::XML::i8->new($_)
-                    } @item_ids
-                )
-        );
-    return undef if _is_error($r);
-    
-    my $ret = {}; 
-    my $i = 0;
-    eval { 
-        foreach (@$r) {
-            $ret->{$item_ids[$i++]} = 1.0 * $_->value;
+    my ($sig, $from_cache, $ts, $ret);
+
+
+    if ($self->{memcached}) {
+
+        $sig = md5_hex join ("", @item_ids);
+
+        $ts = $self->{memcached}->get('last-rate-' . $email_sha256);
+
+        if ($ts) {
+            $ret =  $self->{memcached}->get("multiple-$email_sha256-$sig-$ts");
+
+            if ($ret) {
+                $from_cache = 1;
+                dbg "AFINIAPI : restored in cache: $sig";
+            }
         }
-    };
+    }
+
+    if (!$ret) {
+        my $r = $self->send_request(
+                'estimate_multiple_rates', 
+                RPC::XML::string->new($email_sha256),
+                RPC::XML::array->new( 
+                        map {
+                            RPC::XML::i8->new($_)
+                        } @item_ids
+                    )
+            );
+        return undef if _is_error($r);
+        
+        $ret = {}; 
+        my $i = 0;
+        eval { 
+            foreach (@$r) {
+                $ret->{$item_ids[$i++]} = 1.0 * $_->value;
+            }
+        };
+    }
+
+    if ($self->{memcached} && ! $from_cache) {
+        dbg "AFINIAPI : storing in cache multiple: $sig";
+
+        $self->{memcached}->set("multiple-$email_sha256-$sig-$ts",  $ret, MEMC_TTL)
+            or dbg "memc server failed...";
+
+        $self->_set_memc_ts($email_sha256, $^T) if ! $ts;
+    }
+
 
     return $ret;
 }
