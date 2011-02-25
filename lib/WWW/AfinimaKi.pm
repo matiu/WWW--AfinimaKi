@@ -235,7 +235,7 @@ sub send_request {
 sub _set_memc_ts {
     my ($self, $email_sha256, $ts) = @_;
 
-    dbg "Storing last rate TS $ts";
+    dbg "Storing last rate TS: $ts";
 
     if ( $self->{memcached} ) {
         $self->{memcached}->set('last-rate-'.$email_sha256, $ts || MAX_TS, MEMC_TTL);
@@ -323,7 +323,7 @@ sub set_rate {
     );
 
 
-    $self->_set_memc_ts($email_sha256, $ts);
+    $self->_set_memc_ts($email_sha256, $ts | $^T);
 
     return undef if _is_error($r);
 
@@ -343,7 +343,7 @@ sub generic_add {
         RPC::XML::i4->new($ts||0),
     );
 
-    $self->_set_memc_ts($email_sha256, $ts);
+    $self->_set_memc_ts($email_sha256, $ts | $^T );
 
     return undef if _is_error($r);
     return $r->value;
@@ -418,16 +418,23 @@ sub estimate_rate {
 
     my ($value, $from_cache, $ts);
 
+#dbg "estimate";
     if ($self->{memcached}) {
         $ts = $self->{memcached}->get('last-rate-' . $email_sha256);
 
+#dbg "last rate ts". $ts;
         if ($ts) {
+#    dbg "key"."estimate-rate-$email_sha256-$item_id-$ts";
             $value =  $self->{memcached}->get("estimate-rate-$email_sha256-$item_id-$ts");
-
+#dbg "value". $value;
             if ($value) {
                 $from_cache = 1;
-                dbg "AFINIAPI : restored in cache: $item_id";
+#                dbg "AFINIAPI : restored in cache: $item_id";
             }
+        }
+        else {
+            $ts = $^T;
+            $self->_set_memc_ts($email_sha256, $ts);
         }
     }
 
@@ -445,12 +452,11 @@ sub estimate_rate {
     }
 
     if ($self->{memcached} && ! $from_cache) {
-        dbg "AFINIAPI : storing in cache $item_id : $value";
+#        dbg "AFINIAPI : storing in cache $item_id : $value";
 
-        $self->{memcached}->set("estimate-rate-$email_sha256-$item_id-$^T",  $value, MEMC_TTL)
+        $self->{memcached}->set("estimate-rate-$email_sha256-$item_id-$ts",  
+                $value, MEMC_TTL)
             or dbg "memc server failed...";
-
-        $self->_set_memc_ts($email_sha256, $^T) if ! $ts;
     }
 
     return $value;
@@ -494,8 +500,12 @@ sub estimate_multiple_rates {
 
             if ($ret) {
                 $from_cache = 1;
-                dbg "AFINIAPI : restored in cache: $sig";
+                dbg "AFINIAPI : restored multiple from cache: $sig";
             }
+        }
+        else {
+            $ts = $^T;
+            $self->_set_memc_ts($email_sha256, $ts);
         }
     }
 
@@ -522,11 +532,9 @@ sub estimate_multiple_rates {
 
     if ($self->{memcached} && ! $from_cache) {
         dbg "AFINIAPI : storing in cache multiple: $sig";
-
         $self->{memcached}->set("multiple-$email_sha256-$sig-$ts",  $ret, MEMC_TTL)
             or dbg "memc server failed...";
 
-        $self->_set_memc_ts($email_sha256, $^T) if ! $ts;
     }
 
 
