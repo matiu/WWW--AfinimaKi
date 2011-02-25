@@ -11,7 +11,7 @@ use Cache::Memcached::Fast;
 use Storable;
 use Digest::MD5	qw(md5_hex);
 
-our $VERSION = '0.80';
+our $VERSION = '0.82';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
