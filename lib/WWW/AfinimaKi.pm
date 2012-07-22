@@ -11,7 +11,7 @@ use Cache::Memcached::Fast;
 use Storable;
 use Digest::MD5	qw(md5_hex);
 
-our $VERSION = '0.82';
+our $VERSION = '0.85';
 
 use constant KEY_LENGTH     => 32;
 use constant TIME_SHIFT     => 10;
@@ -25,6 +25,7 @@ sub OP_CODE_ADD_TO_WISHLIST { return 0; }
 sub OP_CODE_ADD_TO_BLACKLIST { return 1; }
 sub OP_CODE_REMOVE_FROM_LISTS { return 2; }
 sub OP_CODE_SET_RATE { return 3; }
+sub OP_CODE_SET_NULL_RATE { return 4; }
 
 sub dbg { print STDERR __PACKAGE__ . ' '.  join(' ', @_)."\n"; }
 
@@ -235,7 +236,7 @@ sub send_request {
 sub _set_memc_ts {
     my ($self, $email_sha256, $ts) = @_;
 
-    dbg "Storing last rate TS: $ts";
+    dbg "Storing last rate TS: " . ($ts || MAX_TS);
 
     if ( $self->{memcached} ) {
         $self->{memcached}->set('last-rate-'.$email_sha256, $ts || MAX_TS, MEMC_TTL);
@@ -307,6 +308,10 @@ sub _set_memc_ts {
     Removes the given items from user's wish and black lists, 
     and also removes user item's rating (if any).
 
+=head4 set_null_rate 
+
+    Set rate rate as NULL. This is useful when the user has already experienced the item (watched a movie, bought the product) but did set a rate. Therefore the item shouldn't be recommended again to the user.
+
 =cut
 
 sub set_rate {
@@ -323,7 +328,7 @@ sub set_rate {
     );
 
 
-    $self->_set_memc_ts($email_sha256, $ts | $^T);
+    $self->_set_memc_ts($email_sha256, $ts || $^T);
 
     return undef if _is_error($r);
 
@@ -343,7 +348,7 @@ sub generic_add {
         RPC::XML::i4->new($ts||0),
     );
 
-    $self->_set_memc_ts($email_sha256, $ts | $^T );
+    $self->_set_memc_ts($email_sha256, $ts || $^T );
 
     return undef if _is_error($r);
     return $r->value;
@@ -363,6 +368,13 @@ sub remove_from_lists {
     my $self = shift;
     return $self->generic_add('remove_from_lists', @_);
 }
+
+
+sub set_null_rate {
+    my $self = shift;
+    return $self->generic_add('set_null_rate', @_);
+}
+
 
 
 sub set_rates_bulk {
